@@ -1,0 +1,7 @@
+plate 120 80 2
+rules 3 3
+hole 1 18 18 5
+hole 2 102 18 5
+hole 3 18 62 5
+hole 4 102 62 5
+hole 5 27 18 8

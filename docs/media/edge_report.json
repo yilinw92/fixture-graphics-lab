@@ -1,0 +1,7 @@
+{
+  "units": "mm",
+  "synthetic_demo_rates": true,
+  "geometry_passes": false,
+  "findings": [{"kind":"edge","hole_a":1,"hole_b":-1,"actual_mm":1.000000,"required_mm":3.000000}],
+  "quote": null
+}

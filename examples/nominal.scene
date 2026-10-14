@@ -1,0 +1,11 @@
+# Units: millimetres. Independent synthetic plate, not a company design.
+# plate width height thickness
+plate 120 80 2
+# rules edge_clearance web_clearance
+rules 3 3
+# hole id centre_x centre_y radius
+hole 1 18 18 5
+hole 2 102 18 5
+hole 3 18 62 5
+hole 4 102 62 5
+hole 5 60 40 8

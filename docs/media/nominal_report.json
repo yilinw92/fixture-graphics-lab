@@ -1,0 +1,9 @@
+{
+  "units": "mm",
+  "synthetic_demo_rates": true,
+  "geometry_passes": true,
+  "findings": [],
+  "quote": {"quantity":10,"material":192.000000,"cutting":172.778757,"setup":12.000000,"total":376.778757},
+  "net_area_mm2":9084.778805,
+  "cut_length_mm":575.929189
+}
