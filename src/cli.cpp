@@ -11,12 +11,13 @@ int main(int argc,char** argv) {
         for(int i=1;i<argc;++i) {
             const std::string arg=argv[i];
             if(arg=="--scene" && i+1<argc) scene=fixture::read_scene(argv[++i]);
+            else if(arg=="--dxf" && i+1<argc) scene=fixture::read_dxf(argv[++i]);
             else if(arg=="--out" && i+1<argc) output=argv[++i];
             else if(arg=="--quantity" && i+1<argc) {
                 const std::string raw=argv[++i]; std::size_t used=0;
                 quantity=std::stoi(raw,&used); if(used!=raw.size()) throw std::invalid_argument("bad quantity");
             } else if(arg=="--help") {
-                std::cout<<"fixture_cli [--scene examples/nominal.scene] [--out artifacts/report] [--quantity 10]\n"; return 0;
+                std::cout<<"fixture_cli [--scene file.scene | --dxf file.dxf] [--out artifacts/report] [--quantity 10]\n"; return 0;
             } else throw std::invalid_argument("unknown or incomplete argument: "+arg);
         }
         fixture::export_report(scene,output,quantity);

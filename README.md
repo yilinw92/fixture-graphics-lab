@@ -1,101 +1,67 @@
-# Fixture Graphics Lab
+# DXF Fixture Inspector — C++ / OpenGL
 
-A **C++17 / OpenGL 3.3** engineering portfolio: review a parameterized plate, find hole-clearance problems, edit geometry interactively, and export reproducible reports with a synthetic cost breakdown.
+A drawing-to-inspection workflow for **concave sheet fixtures with circular cutouts**: import CAD geometry, reject invalid topology, measure manufacturing clearances, inspect a triangulated material domain, edit holes, and export an auditable report plus normalized DXF.
 
-![Actual OpenGL capture of a clearance failure](docs/media/opengl_edge.png)
+![Actual native OpenGL capture of an imported concave fixture](docs/media/notched_fixture.png)
 
-The image above is captured from the native OpenGL application. Red outlines identify rule violations; teal outlines identify passing holes; yellow marks the selection and the inset rule guide.
+Independent portfolio implementation prepared with AI assistance. Drawings and rates are synthetic; no Nebula or other employer source or customer drawings are included.
 
-This is an independent portfolio implementation prepared with AI assistance. It contains no Nebula source code, customer CAD, supplier pricing, or production fixtures. It demonstrates a bounded engineering workflow rather than claiming a production CAD kernel.
+## Engineering work in this version
 
-## Implemented capabilities
+| Problem | Implementation | Evidence |
+| --- | --- | --- |
+| A bounding rectangle misses collisions with a concave notch | Point-in-polygon, closest segment witness, signed circle-to-boundary clearance | `notch_violation.dxf`: the rectangle passes, the actual boundary fails |
+| Unusable CAD input must not become a plausible quote | ASCII DXF tag parser, explicit units, closed-loop and self-intersection validation | Open, crossing, curved and unitless inputs return exit 1 |
+| A renderer must show the material geometry | Vertical slab decomposition with even-odd contour parity; circular holes tessellated into rings | Mesh area agrees with the polygonal domain; triangle centroids exclude cutouts |
+| Pair checks grow quadratically | Sweep-and-prune broad phase, Y interval rejection, exact circular narrow phase | 200 seeded randomized scenes agree with a brute-force oracle |
+| Inspection needs traceable edits | Shared geometry library, analytic picking, cursor-anchored zoom, bounded undo/redo, JSON/CSV/SVG/DXF export | Same analysis supplies CLI and viewport diagnostics |
 
-| Area | Evidence |
-| --- | --- |
-| Modern C++ | Typed data model, standard containers, const references, exceptions, a testable core and RAII GPU/window ownership |
-| Geometry | Analytical circle-to-edge and circle-to-circle clearance; negative clearance identifies overlap/outside geometry |
-| Graphics | OpenGL 3.3 core context, GLSL vertex/fragment shaders, VAO/VBO, interleaved vertex attributes and orthographic matrix |
-| Interaction | World/screen coordinate transforms, analytic hole picking, cursor-anchored zoom, pan and dimension editing |
-| Engineering workflow | Input validation, explicit mm units, pass/fail diagnostics, JSON/CSV/SVG export and itemized synthetic quote |
-| Verification | Geometry and transform checks, CLI/export integration tests, deterministic OpenGL screenshot mode and CI |
+This remains a **2D** inspection tool. Its original code includes the DXF subset reader, topology and clearance algorithms, material tessellator, report exporter, OpenGL shaders and native window adapters. OpenGL and GLFW provide rendering/platform APIs.
 
-## Run on Windows
+## Build and run
 
-From PowerShell in this repository:
+Windows with MinGW GCC installed (the script also accepts `FIXTURE_CXX`):
 
 ```powershell
 .\run.ps1 -Mode Test
-.\run.ps1 -Mode Demo
+.\build\fixture_viewer.exe --dxf examples/notched_fixture.dxf
+.\build\fixture_cli.exe --dxf examples/notch_violation.dxf --out artifacts/notch
 ```
 
-The script uses `C:\msys64\ucrt64\bin\g++.exe` when available; otherwise it looks for `g++` on PATH. Set `FIXTURE_CXX` to select another MinGW GCC compiler. The Windows viewer uses native Win32/WGL and requires a driver supporting OpenGL 3.3; no GLFW or Qt download is needed.
-
-## Run on Ubuntu / WSL
+Linux/WSL with CMake, a C++17 compiler, GLFW and Mesa development packages:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libglfw3-dev libgl1-mesa-dev
+sudo apt-get install build-essential cmake libglfw3-dev libgl1-mesa-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
 python3 tools/check_reports.py build/fixture_cli
-./build/fixture_viewer
+./build/fixture_viewer --dxf examples/notched_fixture.dxf
 ```
 
-For a machine without a desktop display:
+Controls: click a hole; arrows move it 0.5 mm; `Z`/`Y` undo/redo; wheel zooms about the cursor; `WASD` pans; `R` fits; `E` exports the edited geometry and reports to `artifacts/viewer`. `1`/`2`/`3` load introductory scenarios. History retains 100 edits. The title shows the finding count.
 
-```bash
-sudo apt-get install -y xvfb
-xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 ./build/fixture_viewer --example 2 --capture artifacts/opengl.ppm
-```
+CLI exit codes: **0** accepted geometry, **2** manufacturing-rule violations, **1** malformed/unsupported input. Invalid geometry receives no quote. A report contains findings, broad-phase counters, analytic net area/cut length when valid, synthetic line-item costs and `normalized.dxf`. Material cost uses the bounding rectangular stock blank, not net material area.
 
-Core and CLI can be built without OpenGL dependencies using `-DFIXTURE_BUILD_VIEWER=OFF`.
+## CAD contract and algorithms
 
-## Viewer controls
+- One closed, straight-segment `LWPOLYLINE` outer boundary and zero or more `CIRCLE` cutouts.
+- `$INSUNITS=4` (mm) or `1` (inch), normalized to mm and a zero-based bounding-box origin. Export uses mm; arbitrary DXF metadata and original entity handles are not retained.
+- Bulges, widths, tilted OCS, nonzero elevations, additional outer loops and other entities are rejected. Hole IDs are assigned in import order. Thickness is a separate 2 mm default, not inferred from DXF elevation.
+- Nonadjacent segment intersections/touches, collapsed edges and backtracking edges are rejected before analysis. Coordinates/dimensions are bounded to 1e6 mm. Predicates use double precision and a documented fixed tolerance; this is not an exact-predicate CAD kernel.
+- Hole clearance uses signed nearest-boundary distance minus radius. Hole-pair clearance uses centre distance minus both radii. Manufacturing thresholds are independent of topological validity.
+- Triangulation slices at contour vertex X coordinates, sorts edge intersections in each slab, pairs material intervals by parity, then emits trapezoid triangles. Circle chord error is `r*(1-cos(pi/N))`; analytic metrics retain true circles. Meshes are cached until the geometry revision changes. Overlapping/outside/tangent cutouts remain visible as diagnostic outlines, without a material fill.
+- Topology checks and tessellation can be quadratic. The viewport has an 8192-contour-vertex / 256-hole budget. The CLI supports 10000 imported circles; sweep-and-prune can still degrade to O(n²) on dense inputs.
 
-| Control | Action |
-| --- | --- |
-| `1`, `2`, `3` | Nominal, edge-clearance failure, overlap failure |
-| Left click a hole | Select it |
-| Arrow keys | Move selected hole by 0.5 mm |
-| Mouse wheel | Zoom around pointer |
-| `W A S D` | Pan |
-| `R` | Reset view |
-| `E` | Export current scene reports into `artifacts/viewer` |
-| Escape | Close |
+## Reproducible evidence
 
-The window title shows finding count and selection. Press `2`, then press the right arrow four times: the first hole moves from x=6 to x=8 mm, and its clearance rises from 1 to the required 3 mm.
+`fixture_cad_tests` writes `artifacts/cad_benchmark.json`. A local GCC 16.2 Release-style run analyzed a sparse 10000-hole drawing with **49,995,000 possible pairs, 0 exact pair-distance evaluations, approximately 4.12 ms**. This is one measured sparse workload, not a general latency guarantee. Candidate filtering still performs interval comparisons. See [the saved result](docs/evidence/cad_benchmark.json).
 
-## Headless engineering check
+Tests include analytic areas/perimeters, invalid CAD, inch conversion, DXF round-trip, winding invariance, mesh-area agreement, hole exclusion, viewport round-trip and a 200-scene differential oracle. CI builds on Linux and Windows and captures a real OpenGL frame through Mesa/Xvfb.
 
-```bash
-./build/fixture_cli --scene examples/nominal.scene --quantity 10 --out artifacts/nominal
-./build/fixture_cli --scene examples/edge_failure.scene --out artifacts/edge
-```
-
-Outputs are `report.json`, `findings.csv`, and `preview.svg`. Exit codes: `0` passes, `2` reports geometry-rule violations, `1` indicates invalid input or execution error. A scene with geometry findings receives a null quote.
-
-The quote uses demonstration rates: rectangular blank material area, total boundary cutting length, quantity and one setup charge. It is not a commercial quote, machining simulation or manufacturing approval.
-
-## Code map
-
-```text
-include/fixture/geometry.hpp    public geometry and view API
-src/geometry.cpp               constraints, metrics, quoting, parser and exports
-src/viewer.cpp                 OpenGL pipeline and interactive scene
-src/window_win32.cpp           Windows WGL context and input
-src/window_glfw.cpp            Linux GLFW context and input
-tests/test_geometry.cpp        mathematical and behavioral checks
-tools/check_reports.py         real CLI/export integration checks
-```
-
-- [Chinese first lesson and learning path](docs/LEARN_CN.md)
-- [Architecture and interview questions](docs/INTERVIEW_CN.md)
+- [Chinese engineering walkthrough and exercises](docs/ENGINEERING_CN.md)
+- [Introductory C++ / OpenGL lessons](docs/LEARN_CN.md)
 - [Validation record](docs/VALIDATION.md)
-- [References and scope](THIRD_PARTY.md)
+- [Dependencies and upstream references](THIRD_PARTY.md)
 
-## Scope
-
-The supported geometry is a rectangular plate with circular holes. Analytic checks use exact circle formulas; the viewer tessellates circles into 96 segments. Hole disks are overdrawn in the background color, not subtracted by a solid-modeling kernel. No STEP/DXF import, nesting optimizer, CAD topology, 3D lighting, machining toolpaths or production pricing engine is implemented.
-
-Original project code is MIT licensed.
+MIT license. This tool does not implement nesting, toolpath generation, 3D solids or an industrial quoting model.

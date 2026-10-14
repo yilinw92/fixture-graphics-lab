@@ -1,17 +1,18 @@
-# Validation record
+# Validation record — version 0.2
 
-Validated on 2026-10-13 (America/New_York). Independent synthetic examples; no manufacturing approval or commercial pricing claim.
+Validated on 2026-10-14, Windows 11, GCC 16.2.0 / C++17. Synthetic engineering drawings and rates.
 
-| Check | Result |
+| Check | Observed result |
 | --- | --- |
-| Windows GCC build | CLI, tests and viewer compiled with GCC 16.2.0 / C++17 |
-| Core checks | 20 checks passed: nominal and invalid geometry, equality boundary, nonfinite inputs, duplicates, quote arithmetic, transforms and picking |
-| CLI/export integration | Nominal returned 0; edge and overlap failures returned 2; invalid quantity returned 1; JSON/SVG outputs checked |
-| Native OpenGL context | OpenGL 3.3.0, Intel Iris Xe Graphics, driver build 30.0.101.1960 |
-| Native render and GPU readback | Shader compilation, draw and PPM capture succeeded |
+| Native build | CLI, original core tests, CAD tests and OpenGL viewer compiled |
+| Core regressions | 20 geometry, reporting, quoting, transform and picking checks passed |
+| CAD algorithms | Concavity regression, invalid topology, winding invariance, inch conversion and DXF roundtrip passed |
+| Differential oracle | Optimized hole-pair finding set matched brute force on 200 seeded 40-hole scenes |
+| Material triangulation | Triangle area equals polygonal domain area; centroids remain in boundary and outside circular cutouts |
+| Sparse 10000-hole benchmark | 49,995,000 possible pairs, 0 exact pair-distance evaluations, 4.1222 ms in the recorded run |
+| CLI integration | Valid CAD=0, rule violation=2, unsupported/malformed CAD=1; JSON/SVG/normalized DXF inspected |
+| Native graphics | Real OpenGL 3.3 Intel Iris Xe capture of imported notched fixture succeeded |
 
-`docs/media/opengl_edge.png` is converted from the actual framebuffer capture. `docs/media/nominal_report.json` and `edge_report.json` are generated CLI evidence.
+`docs/media/notched_fixture.png` is actual GPU framebuffer readback. `docs/evidence/cad_benchmark.json` is measured output. Sparse pair counts do not count interval comparisons; dense inputs may degrade quadratically. Topology/mesh tests are useful regressions, not an exact-predicate geometry proof.
 
-The renderer uses triangles/lines for display; the independent analytical geometry core decides rule results. A graphically plausible picture is not used as mathematical proof.
-
-GitHub Actions builds Linux and Windows and runs a software-rendered Linux capture. Local results do not imply that a future remote workflow has passed.
+CI builds with Linux GCC and Windows MSVC and captures a Mesa-rendered DXF fixture. The workflow attached to the published commit is the remote validation source.

@@ -24,15 +24,16 @@ using Colour=std::array<float,3>;
 constexpr Colour background{0.04f,0.07f,0.12f},plate_colour{0.18f,0.32f,0.46f},good{0.35f,0.85f,0.75f},bad{1.0f,0.35f,0.30f};
 void add(std::vector<Vertex>& v,fixture::Vec2 p,Colour c){v.push_back({float(p.x),float(p.y),c[0],c[1],c[2]});}
 void line(std::vector<Vertex>& v,fixture::Vec2 a,fixture::Vec2 b,Colour c){add(v,a,c);add(v,b,c);}
-void rectangle(std::vector<Vertex>& v,double x,double y,double w,double h,Colour c){for(const auto p:std::vector<fixture::Vec2>{{x,y},{x+w,y},{x+w,y+h},{x,y},{x+w,y+h},{x,y+h}})add(v,p,c);}
 void circle(std::vector<Vertex>& fill,std::vector<Vertex>& edges,fixture::Vec2 centre,double radius,Colour colour){
+    (void)fill;
     constexpr int segments=96;constexpr double pi=3.14159265358979323846;
     for(int i=0;i<segments;++i){double a=i*2*pi/segments,b=(i+1)*2*pi/segments;fixture::Vec2 p{centre.x+radius*std::cos(a),centre.y+radius*std::sin(a)},q{centre.x+radius*std::cos(b),centre.y+radius*std::sin(b)};
-        add(fill,centre,background);add(fill,p,background);add(fill,q,background);line(edges,p,q,colour);
+        line(edges,p,q,colour);
     }
 }
 
 class Renderer {
+    int cached_revision{-1};std::vector<Vertex> cached_material;
     PFNGLGENVERTEXARRAYSPROC gen_vao{};PFNGLBINDVERTEXARRAYPROC bind_vao{};PFNGLDELETEVERTEXARRAYSPROC delete_vao{};
     PFNGLGENBUFFERSPROC gen_buffers{};PFNGLBINDBUFFERPROC bind_buffer{};PFNGLBUFFERDATAPROC buffer_data{};PFNGLDELETEBUFFERSPROC delete_buffers{};
     PFNGLCREATESHADERPROC create_shader{};PFNGLSHADERSOURCEPROC shader_source{};PFNGLCOMPILESHADERPROC compile_shader{};PFNGLGETSHADERIVPROC shader_iv{};PFNGLGETSHADERINFOLOGPROC shader_log{};PFNGLDELETESHADERPROC delete_shader{};
@@ -69,20 +70,20 @@ void main(){output_colour=vec4(vertex_colour,1.0);})";
         view_location=uniform_location(program,"view_matrix");
     }
     ~Renderer(){if(vbo)delete_buffers(1,&vbo);if(vao)delete_vao(1,&vao);if(program)delete_program(program);}
-    void draw(const fixture::Scene& scene,const fixture::View2D& view,int width,int height,int selected){
+    void draw(const fixture::Scene& scene,const fixture::View2D& view,int width,int height,int selected,int revision){
         std::vector<Vertex> triangles,lines;const auto findings=fixture::analyze(scene);
+        if(revision!=cached_revision){cached_material.clear();for(auto p:fixture::triangulate_material(scene))add(cached_material,p,plate_colour);cached_revision=revision;}
+        triangles=cached_material;
         for(int i=-100;i<=250;i+=10){line(lines,{double(i),-100},{double(i),200},{0.1f,0.15f,0.22f});line(lines,{-100,double(i)},{250,double(i)},{0.1f,0.15f,0.22f});}
-        rectangle(triangles,0,0,scene.plate.width,scene.plate.height,plate_colour);
-        const double w=scene.plate.width,h=scene.plate.height,m=scene.rules.edge_clearance;
-        for(auto [a,b]:std::vector<std::pair<fixture::Vec2,fixture::Vec2>>{{{0,0},{w,0}},{{w,0},{w,h}},{{w,h},{0,h}},{{0,h},{0,0}}})line(lines,a,b,{0.45f,0.7f,0.95f});
-        for(auto [a,b]:std::vector<std::pair<fixture::Vec2,fixture::Vec2>>{{{m,m},{w-m,m}},{{w-m,m},{w-m,h-m}},{{w-m,h-m},{m,h-m}},{{m,h-m},{m,m}}})line(lines,a,b,{0.55f,0.5f,0.25f});
+        const auto outline=fixture::boundary(scene);
+        for(std::size_t i=0;i<outline.size();++i)line(lines,outline[i],outline[(i+1)%outline.size()],{0.45f,0.7f,0.95f});
         for(std::size_t i=0;i<scene.holes.size();++i){const auto& hole=scene.holes[i];const bool invalid=std::any_of(findings.begin(),findings.end(),[&](auto f){return f.first==hole.id||f.second==hole.id;});
             circle(triangles,lines,hole.centre,hole.radius,invalid?bad:good);
             if(int(i)==selected){std::vector<Vertex> discard;circle(discard,lines,hole.centre,hole.radius+1,{1.0f,0.85f,0.3f});}
         }
         for(const auto& finding:findings){auto it=std::find_if(scene.holes.begin(),scene.holes.end(),[&](auto h){return h.id==finding.first;});if(it==scene.holes.end())continue;
             if(finding.second>=0){auto other=std::find_if(scene.holes.begin(),scene.holes.end(),[&](auto h){return h.id==finding.second;});if(other!=scene.holes.end())line(lines,it->centre,other->centre,bad);}
-            else {const auto c=it->centre;const std::array<double,4> d{c.x,w-c.x,c.y,h-c.y};int side=int(std::min_element(d.begin(),d.end())-d.begin());fixture::Vec2 end=c;if(side==0)end.x=0;else if(side==1)end.x=w;else if(side==2)end.y=0;else end.y=h;line(lines,c,end,bad);}
+            else line(lines,it->centre,fixture::closest_boundary(scene,it->centre),bad);
         }
         line(lines,{0,0},{15,0},{1,0.4f,0.4f});line(lines,{0,0},{0,15},{0.3f,1,0.4f});
         glViewport(0,0,width,height);glClearColor(background[0],background[1],background[2],1);glClear(GL_COLOR_BUFFER_BIT);
@@ -107,27 +108,32 @@ void capture(const std::string& path,int width,int height){
 
 int main(int argc,char** argv){
     try{
-        std::string capture_path;int mode=1;
-        for(int i=1;i<argc;++i){std::string arg=argv[i];if(arg=="--capture" && i+1<argc)capture_path=argv[++i];else if(arg=="--example" && i+1<argc){mode=std::stoi(argv[++i]);if(mode<1||mode>3)throw std::invalid_argument("example must be 1, 2, or 3");}else throw std::invalid_argument("usage: fixture_viewer [--capture artifacts/view.ppm] [--example 1|2|3]");}
-        fixture::Window window(!capture_path.empty());Renderer renderer(window);fixture::Scene scene=fixture::example_scene(mode);fixture::View2D view;int selected=0;
+        std::string capture_path;fixture::Scene scene=fixture::example_scene(1);
+        for(int i=1;i<argc;++i){std::string arg=argv[i];if(arg=="--capture" && i+1<argc)capture_path=argv[++i];else if(arg=="--example" && i+1<argc){int mode=std::stoi(argv[++i]);if(mode<1||mode>3)throw std::invalid_argument("example must be 1, 2, or 3");scene=fixture::example_scene(mode);}else if(arg=="--dxf"&&i+1<argc)scene=fixture::read_dxf(argv[++i]);else if(arg=="--scene"&&i+1<argc)scene=fixture::read_scene(argv[++i]);else throw std::invalid_argument("usage: fixture_viewer [--dxf file | --scene file] [--capture file.ppm] [--example 1|2|3]");}
+        fixture::Window window(!capture_path.empty());Renderer renderer(window);fixture::View2D view;int selected=0,revision=0;
+        std::vector<fixture::Scene> undo,redo;
+        auto fit=[&](){view.centre={scene.plate.width/2,scene.plate.height/2};view.span_x=std::max(scene.plate.width,scene.plate.height*window.width/window.height)*1.4;};fit();
         std::cout<<"OpenGL: "<<glGetString(GL_VERSION)<<" | Renderer: "<<glGetString(GL_RENDERER)<<"\n";
         do{
             if(!window.poll())break;
             if(window.clicked){int hit=fixture::pick_hole(scene,view.screen_to_world({double(window.mouse_x),double(window.mouse_y)},window.width,window.height));if(hit>=0)selected=hit;}
             if(window.wheel)view.zoom_at({double(window.mouse_x),double(window.mouse_y)},std::pow(1.15,window.wheel),window.width,window.height);
             for(int key:window.keys){
-                if(key>='1' && key<='3'){scene=fixture::example_scene(key-'0');selected=0;view={};}
-                else if(key==37)scene.holes[selected].centre.x-=0.5;
-                else if(key==39)scene.holes[selected].centre.x+=0.5;
-                else if(key==38)scene.holes[selected].centre.y+=0.5;
-                else if(key==40)scene.holes[selected].centre.y-=0.5;
+                if((key>=37&&key<=40&&!scene.holes.empty())||(key>='1'&&key<='3')){undo.push_back(scene);if(undo.size()>100)undo.erase(undo.begin());redo.clear();++revision;}
+                if(key>='1' && key<='3'){scene=fixture::example_scene(key-'0');selected=0;fit();}
+                else if(key=='Z'&&!undo.empty()){redo.push_back(scene);scene=undo.back();undo.pop_back();selected=0;++revision;}
+                else if(key=='Y'&&!redo.empty()){undo.push_back(scene);scene=redo.back();redo.pop_back();selected=0;++revision;}
+                else if(key==37&&!scene.holes.empty())scene.holes[selected].centre.x-=0.5;
+                else if(key==39&&!scene.holes.empty())scene.holes[selected].centre.x+=0.5;
+                else if(key==38&&!scene.holes.empty())scene.holes[selected].centre.y+=0.5;
+                else if(key==40&&!scene.holes.empty())scene.holes[selected].centre.y-=0.5;
                 else if(key=='A')view.centre.x-=3;else if(key=='D')view.centre.x+=3;
                 else if(key=='W')view.centre.y+=3;else if(key=='S')view.centre.y-=3;
                 else if(key=='E')fixture::export_report(scene,"artifacts/viewer");
-                else if(key=='R')view={};
+                else if(key=='R')fit();
             }
-            window.title("Fixture Graphics Lab | Findings: "+std::to_string(fixture::analyze(scene).size())+" | H"+std::to_string(scene.holes[selected].id)+" | 1/2/3 scenes, arrows move, wheel zoom, WASD pan, E export");
-            renderer.draw(scene,view,window.width,window.height,selected);
+            window.title("DXF Fixture Inspector | Findings: "+std::to_string(fixture::analyze(scene).size())+" | "+(scene.holes.empty()?"No holes":"H"+std::to_string(scene.holes[selected].id))+" | arrows edit, Z/Y undo/redo, wheel zoom, E export DXF/report");
+            renderer.draw(scene,view,window.width,window.height,selected,revision);
             if(!capture_path.empty()){capture(capture_path,window.width,window.height);std::cout<<"Capture: "<<capture_path<<"\n";break;}
             window.present();std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }while(true);

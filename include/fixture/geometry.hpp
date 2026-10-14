@@ -7,7 +7,7 @@ struct Vec2 { double x{}, y{}; };
 struct Hole { int id{}; Vec2 centre; double radius{}; };
 struct Plate { double width{}, height{}, thickness{}; };
 struct Rules { double edge_clearance{3.0}, web_clearance{3.0}; };
-struct Scene { Plate plate; Rules rules; std::vector<Hole> holes; };
+struct Scene { Plate plate; Rules rules; std::vector<Hole> holes; std::vector<Vec2> outline; };
 enum class FindingKind { EdgeClearance, HoleClearance };
 struct Finding {
     FindingKind kind;
@@ -23,6 +23,19 @@ void validate(const Scene& scene);
 double edge_clearance(const Plate& plate, const Hole& hole);
 double hole_clearance(const Hole& a, const Hole& b);
 std::vector<Finding> analyze(const Scene& scene);
+struct AnalysisStats { std::size_t possible_pairs{}, narrow_phase_pairs{}; };
+std::vector<Finding> analyze_indexed(const Scene& scene, AnalysisStats& stats);
+std::vector<Vec2> boundary(const Scene& scene);
+double polygon_area(const std::vector<Vec2>& polygon);
+bool point_inside(const std::vector<Vec2>& polygon, Vec2 point);
+Vec2 closest_boundary(const Scene& scene, Vec2 point);
+double edge_clearance(const Scene& scene, const Hole& hole);
+void validate_polygon(const std::vector<Vec2>& polygon);
+// Vertical decomposition of a simple boundary and disjoint circular cutouts.
+// Three consecutive vertices form one triangle; circles use a bounded chord error.
+std::vector<Vec2> triangulate_material(const Scene& scene, int circle_segments = 96);
+Scene read_dxf(const std::string& path, double thickness = 2.0);
+void write_dxf(const Scene& scene, const std::string& path);
 Metrics metrics(const Scene& scene);
 Quote quote(const Scene& scene, int quantity, const Rates& rates = {});
 Scene read_scene(const std::string& path);

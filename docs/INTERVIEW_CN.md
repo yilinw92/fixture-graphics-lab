@@ -1,5 +1,7 @@
 # C++ / Graphics 项目讲解
 
+当前主项目已升级。进阶设计、失败案例、性能对照和练习见 [ENGINEERING_CN.md](ENGINEERING_CN.md)。本页保留入门说明。
+
 ## 60 秒英文介绍
 
 > I built a C++ engineering review tool for a rectangular plate with circular holes. The core checks edge and hole-to-hole clearances and exports reproducible diagnostics and a synthetic cost breakdown. The OpenGL 3.3 viewer uses vertex buffers, a vertex array and GLSL shaders, with a matrix mapping engineering coordinates to clip space. I added picking, pan, cursor-centered zoom and interactive edits. The geometry core is independent of the renderer, so mathematical rules and file exports can be tested without a graphics context. It is a bounded portfolio tool, not a full CAD kernel.
